@@ -3,7 +3,8 @@ import gleam/io
 import gleam/list
 import gleam/iterator
 import gleam/string
-import gleam/option.{None, type Option, Some, map}
+import gleam/option.{type Option, None, Some, map}
+import gleam/string_builder as sb
 
 pub type ParseResult {
   ParseResult(tag_name: String, attrs: List(#(String, String)))
@@ -59,24 +60,39 @@ pub fn parse_css_selector(css_selector: String) -> Option(ParseResult) {
       let attrs = case list.is_empty(acc.classes) {
         True -> acc.attrs
         False -> {
-          let class_in_attr = case find_class_in_attrs(acc.attrs) {
-            "" -> ""
-            cls -> cls <> " "
+          // let class_in_attr = case find_class_in_attrs(acc.attrs) {
+          //   "" -> ""
+          //   cls -> cls <> " "
+          // }
+
+          let class_in_attr_sb = case find_class_in_attrs(acc.attrs) {
+            "" -> sb.new()
+            cls ->
+              sb.from_string(cls)
+              |> sb.append(" ")
           }
 
-          let cls =
-            class_in_attr <> {
-              acc.classes
-              |> list.unique()
-              |> list.reverse()
-              |> string.join(with: " ")
-            }
-
-          [
-            #("class", cls),
-            ..acc.attrs
+          let cls_sb =
+            acc.classes
+            |> list.unique()
             |> list.reverse()
-          ]
+            |> list.intersperse(" ")
+            |> list.fold(from: class_in_attr_sb, with: fn(acc, cls) {
+              acc
+              |> sb.append(cls)
+            })
+
+          // let cls =
+          //   class_in_attr
+          //   <> {
+          //     acc.classes
+          //     |> list.unique()
+          //     |> list.reverse()
+          //     |> string.join(with: " ")
+          //   }
+
+          [#("class", sb.to_string(cls_sb)), ..acc.attrs]
+          // |> list.reverse()
         }
       }
 
@@ -130,16 +146,14 @@ fn process_char(acc: ParseAcc, char: String) -> Option(ParseAcc) {
       map(finish_prefix(acc), fn(acc) { ParseAcc(..acc, symbol_type: Class) })
 
     "[" ->
-      map(
-        finish_prefix(acc),
-        fn(acc) { ParseAcc(..acc, symbol_type: AttributeName) },
-      )
+      map(finish_prefix(acc), fn(acc) {
+        ParseAcc(..acc, symbol_type: AttributeName)
+      })
 
     "=" ->
-      map(
-        finish_prefix(acc),
-        fn(acc) { ParseAcc(..acc, symbol_type: AttributeValue) },
-      )
+      map(finish_prefix(acc), fn(acc) {
+        ParseAcc(..acc, symbol_type: AttributeValue)
+      })
 
     "]" ->
       map(finish_prefix(acc), fn(acc) { ParseAcc(..acc, symbol_type: Tag) })

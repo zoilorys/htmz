@@ -10,3 +10,4 @@ gleam_stdlib = "~> 0.36"
 
 [dev-dependencies]
 gleeunit = "~> 1.0"
+glychee = "~> 1.1"

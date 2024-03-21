@@ -2,6 +2,7 @@ import htmz/selector_parser.{ParseResult, parse_css_selector}
 import gleam/string
 import gleam/list as gleam_list
 import gleam/option.{Some}
+import gleam/string_builder.{type StringBuilder} as sb
 
 pub type Attr {
   Attr(name: String, value: String)
@@ -141,55 +142,85 @@ fn do_escape(escaped: String, content: String) -> String {
   }
 }
 
-fn children_to_string(children: List(Htmz)) -> String {
+fn children_to_string_builder(
+  builder: StringBuilder,
+  children: List(Htmz),
+) -> StringBuilder {
   children
-  |> gleam_list.map(to_string)
-  |> string.join("")
+  |> gleam_list.fold(from: builder, with: fn(acc, child) {
+    acc
+    |> to_string_builder(child)
+  })
 }
 
-fn attrs_to_string(attrs: List(Attr)) -> String {
-  let str =
-    attrs
-    |> gleam_list.map(fn(attr) {
-      let name = string.lowercase(attr.name)
-      case name {
-        "" -> ""
-        _ ->
-          case attr.value {
-            "" -> name
-            _ -> name <> "=\"" <> escape(attr.value) <> "\""
-          }
-      }
-    })
-    |> string.join(" ")
-
-  case str {
-    "" -> ""
-    _ -> " " <> str
-  }
+fn attrs_to_string_builder(
+  builder: StringBuilder,
+  attrs: List(Attr),
+) -> StringBuilder {
+  attrs
+  |> gleam_list.fold(from: builder, with: fn(acc, attr) {
+    let name = string.lowercase(attr.name)
+    case name {
+      "" -> acc
+      _ ->
+        case attr.value {
+          "" ->
+            acc
+            |> sb.append(name)
+            |> sb.append(" ")
+          _ ->
+            acc
+            |> sb.append(name)
+            |> sb.append("=\"")
+            |> sb.append(escape(attr.value))
+            |> sb.append("\"")
+            |> sb.append(" ")
+        }
+    }
+  })
 }
 
-pub fn to_string(el: Htmz) -> String {
+pub fn to_string_builder(builder: StringBuilder, el: Htmz) -> StringBuilder {
   case el {
-    Text(text) -> escape(text)
+    Text(text) ->
+      builder
+      |> sb.append(escape(text))
     _ -> {
       let #(tag, attrs, children) = to_tuple(el)
 
       case tag {
-        "" -> ""
+        "" -> builder
 
         "input" | "br" | "hr" | "img" | "link" | "meta" -> {
-          "<" <> tag <> attrs_to_string(attrs) <> "/>\n"
+          builder
+          |> sb.append("<")
+          |> sb.append(tag)
+          |> sb.append(" ")
+          |> attrs_to_string_builder(attrs)
+          |> sb.append("/>\n")
         }
 
         _ -> {
-          "<" <> tag <> attrs_to_string(attrs) <> ">\n" <> children_to_string(
-            children,
-          ) <> "</" <> tag <> ">"
+          builder
+          |> sb.append("<")
+          |> sb.append(tag)
+          |> sb.append(" ")
+          |> attrs_to_string_builder(attrs)
+          |> sb.append(">\n")
+          |> children_to_string_builder(children)
+          |> sb.append("</")
+          |> sb.append(tag)
+          |> sb.append(">\n")
         }
       }
     }
   }
+}
+
+pub fn to_string(el: Htmz) -> String {
+  el
+  |> to_string_builder(sb.new(), _)
+  |> sb.to_string()
 }
 
 fn to_tuple(el: Htmz) -> ElTuple {
